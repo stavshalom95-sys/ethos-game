@@ -1,21 +1,21 @@
 import type { Metadata } from 'next';
-import { Heebo } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import './globals.css';
 
-const heebo = Heebo({
-  subsets: ['hebrew', 'latin'],
+const inter = Inter({
+  subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-heebo',
+  variable: '--font-inter',
   display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'אתוס – דילמות מוסריות',
-  description: 'האם אתה יודע מה הדבר הנכון לעשות? הצביעו בדילמות מוסריות ומדדו את עצמכם אל מול האחרים.',
+  title: 'Ethos: The Ultimate Debate',
+  description: 'Pick a side. See where the world stands. Vote on moral dilemmas and compare yourself to everyone else.',
   openGraph: {
-    title: 'אתוס – דילמות מוסריות',
-    description: 'הצביעו בדילמות מוסריות ומדדו את עצמכם אל מול האחרים.',
-    locale: 'he_IL',
+    title: 'Ethos: The Ultimate Debate',
+    description: 'Pick a side. See where the world stands.',
+    locale: 'en_US',
     type: 'website',
   },
 };
@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="he" dir="rtl" className={heebo.variable}>
+    <html lang="en" className={inter.variable}>
       <body className="bg-zinc-950 text-white font-sans min-h-screen">
         {children}
       </body>
