@@ -15,25 +15,57 @@ interface VoteData {
   userVote?: Vote;
 }
 
-// ─── Daily dilemma helpers ────────────────────────────────────────────────────
+// ─── CET Reset Logic ──────────────────────────────────────────────────────────
+//
+// Dilemmas rotate daily at 10:00 AM Central European Time (Europe/Berlin).
+// This handles both CET (UTC+1, winter) and CEST (UTC+2, summer) automatically.
+//
+// Launch anchor: July 8 2026 at 10:00 AM CEST = 08:00 UTC → index 0 (Messi).
 
-function getTodayString(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const LAUNCH_RESET_MS = Date.UTC(2026, 6, 8, 8, 0, 0);
+
+/**
+ * Returns a Date representing the next 10:00 AM Europe/Berlin time.
+ * Works correctly regardless of DST because it measures seconds from the
+ * current Berlin clock time, not from a hardcoded UTC offset.
+ */
+function getNextResetDate(): Date {
+  const now = new Date();
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false,
+    })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value])
+  );
+  const berlinSecsNow =
+    parseInt(parts.hour) * 3600 + parseInt(parts.minute) * 60 + parseInt(parts.second);
+  let secsUntilReset = 10 * 3600 - berlinSecsNow; // seconds until 10:00 AM Berlin
+  if (secsUntilReset <= 0) secsUntilReset += 86_400;  // already past → aim for tomorrow
+  return new Date(now.getTime() + secsUntilReset * 1000);
+}
+
+/**
+ * How many full dilemma periods have elapsed since launch.
+ * Period 0 = July 8 2026 after 10 AM CET  → Messi vs Ronaldo (index 0).
+ * Period 1 = July 9 2026 after 10 AM CET  → iPhone vs Android (index 1).
+ * Before launch, clamps to 0 so Messi is always shown first.
+ */
+function getDilemmaDay(): number {
+  const lastResetMs = getNextResetDate().getTime() - 86_400_000;
+  return Math.max(0, Math.floor((lastResetMs - LAUNCH_RESET_MS) / 86_400_000));
 }
 
 function getDailyDilemma(): Dilemma {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86_400_000);
-  return dilemmas[dayOfYear % dilemmas.length];
+  return dilemmas[getDilemmaDay() % dilemmas.length];
 }
 
-function getTimeUntilMidnight() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0);
-  const diff = midnight.getTime() - now.getTime();
+function getTimeUntilReset() {
+  const diff = getNextResetDate().getTime() - Date.now();
   return {
     h: Math.floor(diff / 3_600_000),
     m: Math.floor((diff % 3_600_000) / 60_000),
@@ -47,23 +79,23 @@ function pad(n: number) {
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
-function storageKey(id: number): string {
-  return `ethos_daily_${getTodayString()}_${id}`;
+function storageKey(day: number): string {
+  return `ethos_daily_${day}`;
 }
 
-function loadVotes(dilemma: Dilemma): VoteData {
+function loadVotes(day: number): VoteData {
   try {
-    const raw = localStorage.getItem(storageKey(dilemma.id));
+    const raw = localStorage.getItem(storageKey(day));
     if (raw) return JSON.parse(raw) as VoteData;
   } catch {
-    // ignore storage errors
+    // ignore (private mode etc.)
   }
   return { yes: 0, no: 0 };
 }
 
-function persistVotes(dilemma: Dilemma, data: VoteData) {
+function persistVotes(day: number, data: VoteData) {
   try {
-    localStorage.setItem(storageKey(dilemma.id), JSON.stringify(data));
+    localStorage.setItem(storageKey(day), JSON.stringify(data));
   } catch {
     // ignore
   }
@@ -90,23 +122,24 @@ export default function HomePage() {
   const [gameState, setGameState] = useState<GameState>('question');
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [countdown, setCountdown] = useState<ReturnType<typeof getTimeUntilMidnight> | null>(null);
+  const [countdown, setCountdown] = useState<ReturnType<typeof getTimeUntilReset> | null>(null);
 
-  // Stable reference — same dilemma for the entire day
-  const dilemma = useMemo(() => getDailyDilemma(), []);
+  // Computed once per page load — stays stable for the session
+  const dilemmaDay = useMemo(() => getDilemmaDay(), []);
+  const dilemma    = useMemo(() => getDailyDilemma(), []);
 
-  // Hydrate: load today's saved vote from localStorage
+  // Load today's saved vote on mount
   useEffect(() => {
-    const votes = loadVotes(dilemma);
+    const votes = loadVotes(dilemmaDay);
     setVoteData(votes);
     if (votes.userVote) setGameState('results');
     setMounted(true);
-  }, [dilemma]);
+  }, [dilemmaDay]);
 
-  // Countdown timer — ticks every second
+  // Countdown to next 10:00 AM CET reset
   useEffect(() => {
-    setCountdown(getTimeUntilMidnight());
-    const id = setInterval(() => setCountdown(getTimeUntilMidnight()), 1000);
+    setCountdown(getTimeUntilReset());
+    const id = setInterval(() => setCountdown(getTimeUntilReset()), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -114,10 +147,10 @@ export default function HomePage() {
     if (!voteData || voteData.userVote) return;
     const updated: VoteData = {
       yes: voteData.yes + (vote === 'yes' ? 1 : 0),
-      no: voteData.no + (vote === 'no' ? 1 : 0),
+      no:  voteData.no  + (vote === 'no'  ? 1 : 0),
       userVote: vote,
     };
-    persistVotes(dilemma, updated);
+    persistVotes(dilemmaDay, updated);
     setVoteData(updated);
     setGameState('results');
   };
@@ -149,7 +182,7 @@ export default function HomePage() {
     }
   };
 
-  // Show spinner until client hydration is complete
+  // Spinner until client hydration completes
   if (!mounted || !voteData) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-zinc-950">
@@ -160,13 +193,11 @@ export default function HomePage() {
 
   const total = voteData.yes + voteData.no;
   const yesPercent = total === 0 ? 0 : Math.round((voteData.yes / total) * 100);
-  const noPercent = total === 0 ? 0 : 100 - yesPercent;
+  const noPercent  = total === 0 ? 0 : 100 - yesPercent;
   const userPickPercent = voteData.userVote === 'yes' ? yesPercent : noPercent;
   const standing = userPickPercent >= 50 ? 'Majority' : 'Minority';
   const today = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
+    weekday: 'long', month: 'long', day: 'numeric',
   });
 
   return (
@@ -177,16 +208,14 @@ export default function HomePage() {
         <p className="text-[11px] font-bold tracking-[0.3em] text-blue-500 uppercase">
           Daily Dilemma
         </p>
-        <h1 className="text-5xl font-extrabold tracking-tight text-white">
-          ETHOS
-        </h1>
+        <h1 className="text-5xl font-extrabold tracking-tight text-white">ETHOS</h1>
         <p className="text-zinc-600 text-xs">{today}</p>
 
-        {/* Countdown pill */}
+        {/* Countdown to 10:00 AM CET */}
         <div className="pt-3">
           <div className="inline-flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-2">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-zinc-500 text-xs">Next dilemma in</span>
+            <span className="text-zinc-500 text-xs">Next dilemma at 10:00 AM CET in</span>
             <span className="font-mono font-bold text-white text-sm tracking-wider">
               {countdown
                 ? `${pad(countdown.h)}:${pad(countdown.m)}:${pad(countdown.s)}`
@@ -199,7 +228,6 @@ export default function HomePage() {
       {/* ── Card ── */}
       <section className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl">
 
-        {/* Question */}
         <div className="mb-7">
           <span className="inline-block text-[10px] font-bold tracking-widest text-blue-500 uppercase mb-3">
             Today&apos;s Question
@@ -240,7 +268,6 @@ export default function HomePage() {
               Results
             </span>
 
-            {/* Option A bar */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-sm">
                 <span className={`font-semibold flex items-center gap-1.5 ${voteData.userVote === 'yes' ? 'text-blue-400' : 'text-zinc-400'}`}>
@@ -256,7 +283,6 @@ export default function HomePage() {
               <ProgressBar percent={yesPercent} color="blue" />
             </div>
 
-            {/* Option B bar */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-sm">
                 <span className={`font-semibold flex items-center gap-1.5 ${voteData.userVote === 'no' ? 'text-emerald-400' : 'text-zinc-400'}`}>
@@ -272,7 +298,6 @@ export default function HomePage() {
               <ProgressBar percent={noPercent} color="green" />
             </div>
 
-            {/* Majority / Minority banner */}
             <div className={`rounded-xl px-4 py-3 text-center border ${
               standing === 'Majority'
                 ? 'bg-blue-950 border-blue-900 shadow-[0_0_20px_rgba(59,130,246,0.15)]'
@@ -292,7 +317,6 @@ export default function HomePage() {
               </p>
             )}
 
-            {/* Share button */}
             <button
               onClick={handleShare}
               className="w-full bg-zinc-800 hover:bg-zinc-700 active:scale-95
