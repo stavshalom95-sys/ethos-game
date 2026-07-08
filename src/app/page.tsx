@@ -98,20 +98,16 @@ export default function HomePage() {
     const total = voteData.yes + voteData.no;
     const yesPercent = total === 0 ? 0 : Math.round((voteData.yes / total) * 100);
     const noPercent = 100 - yesPercent;
-    const choice = voteData.userVote === 'yes' ? dilemma.optionA : dilemma.optionB;
+    const userPickPercent = voteData.userVote === 'yes' ? yesPercent : noPercent;
+    const standing = userPickPercent >= 50 ? 'majority' : 'minority';
+    const link = typeof window !== 'undefined' ? window.location.href : 'https://ethos-game.vercel.app';
 
     const text = [
-      `🎭 Ethos`,
+      `🎭 I'm in the ${standing} on: "${dilemma.question}"`,
       ``,
-      `${dilemma.question}`,
+      `${userPickPercent}% of people agree with me!`,
       ``,
-      `My pick: ${choice}`,
-      ``,
-      `Results:`,
-      `${dilemma.optionA} — ${yesPercent}%`,
-      `${dilemma.optionB} — ${noPercent}%`,
-      ``,
-      `What would you pick? 👇`,
+      `What about you? ${link}`,
     ].join('\n');
 
     try {
@@ -135,6 +131,8 @@ export default function HomePage() {
   const total = voteData.yes + voteData.no;
   const yesPercent = total === 0 ? 0 : Math.round((voteData.yes / total) * 100);
   const noPercent = total === 0 ? 0 : 100 - yesPercent;
+  const userPickPercent = voteData.userVote === 'yes' ? yesPercent : noPercent;
+  const standing = userPickPercent >= 50 ? 'Majority' : 'Minority';
 
   return (
     <main className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center px-4 py-12">
@@ -218,8 +216,19 @@ export default function HomePage() {
               <ProgressBar percent={noPercent} color="red" />
             </div>
 
+            {voteData.userVote && (
+              <div className={`rounded-xl px-4 py-3 text-center ${standing === 'Majority' ? 'bg-emerald-950 border border-emerald-900' : 'bg-zinc-800 border border-zinc-700'}`}>
+                <p className={`font-bold text-sm ${standing === 'Majority' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                  You are in the {standing}!
+                </p>
+                <p className="text-zinc-500 text-xs mt-0.5">
+                  {userPickPercent}% of people voted the same as you.
+                </p>
+              </div>
+            )}
+
             {total > 0 && (
-              <p className="text-zinc-700 text-xs text-center pt-1">
+              <p className="text-zinc-700 text-xs text-center">
                 {total.toLocaleString()} votes
               </p>
             )}
