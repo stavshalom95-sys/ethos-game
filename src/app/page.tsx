@@ -16,7 +16,7 @@ interface VoteData {
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
-function storageKey(id: string) {
+function storageKey(id: number) {
   return `ethos_votes_${id}`;
 }
 
@@ -67,7 +67,7 @@ export default function HomePage() {
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  const loadDilemma = useCallback((excludeId?: string) => {
+  const loadDilemma = useCallback((excludeId?: number) => {
     const pool = excludeId
       ? dilemmas.filter((d) => d.id !== excludeId)
       : dilemmas;
@@ -106,7 +106,7 @@ export default function HomePage() {
     const total = voteData.yes + voteData.no;
     const yesPercent = Math.round((voteData.yes / total) * 100);
     const noPercent = 100 - yesPercent;
-    const choice = voteData.userVote === 'yes' ? 'כן ✅' : 'לא ❌';
+    const choice = voteData.userVote === 'yes' ? dilemma.optionA : dilemma.optionB;
 
     const text = [
       `🎭 אתוס — דילמות מוסריות`,
@@ -116,8 +116,8 @@ export default function HomePage() {
       `הצבעתי: ${choice}`,
       ``,
       `תוצאות:`,
-      `✅ כן — ${yesPercent}%`,
-      `❌ לא — ${noPercent}%`,
+      `${dilemma.optionA} — ${yesPercent}%`,
+      `${dilemma.optionB} — ${noPercent}%`,
       ``,
       `מה תצביע? 👇`,
     ].join('\n');
@@ -164,12 +164,9 @@ export default function HomePage() {
           <span className="inline-block text-[10px] font-semibold tracking-widest text-zinc-600 uppercase mb-3">
             הדילמה
           </span>
-          <h2 className="text-xl font-bold text-white leading-relaxed mb-3">
+          <h2 className="text-xl font-bold text-white leading-relaxed">
             {dilemma.question}
           </h2>
-          <p className="text-zinc-400 text-sm leading-relaxed">
-            {dilemma.description}
-          </p>
         </div>
 
         {/* ── Question state ── */}
@@ -179,13 +176,13 @@ export default function HomePage() {
               onClick={() => handleVote('yes')}
               className="flex-1 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold py-3.5 rounded-xl transition-all duration-150 text-base"
             >
-              כן
+              {dilemma.optionA}
             </button>
             <button
               onClick={() => handleVote('no')}
               className="flex-1 bg-red-700 hover:bg-red-600 active:scale-95 text-white font-bold py-3.5 rounded-xl transition-all duration-150 text-base"
             >
-              לא
+              {dilemma.optionB}
             </button>
           </div>
         )}
@@ -207,7 +204,7 @@ export default function HomePage() {
                       : 'text-zinc-300'
                   }`}
                 >
-                  כן
+                  {dilemma.optionA}
                   {voteData.userVote === 'yes' && (
                     <span className="text-[10px] font-normal text-emerald-600 bg-emerald-950 border border-emerald-900 px-1.5 py-0.5 rounded-full">
                       הצבעת
@@ -229,7 +226,7 @@ export default function HomePage() {
                       : 'text-zinc-300'
                   }`}
                 >
-                  לא
+                  {dilemma.optionB}
                   {voteData.userVote === 'no' && (
                     <span className="text-[10px] font-normal text-red-600 bg-red-950 border border-red-900 px-1.5 py-0.5 rounded-full">
                       הצבעת
